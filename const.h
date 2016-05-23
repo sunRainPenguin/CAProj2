@@ -14,4 +14,5 @@ using namespace std;
 #define maxDigitBitCount 32
 #define regCount 32
 #define codeBegAdd 64
+#define preIssueMaxSize 4
 

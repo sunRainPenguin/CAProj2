@@ -23,28 +23,36 @@ private:
 	vector<code*> instructions;
 	vector<data*> dataArray;
 	vector<int> registers;
+	vector<int> regState;		//0: released; 1: writing; 2: reading
 	vector<int> dataVal;
 
 	int cycle;
 	int PC;
-	bool canFetchNew;
-	string waitingInst;
-	string exedInst;
+	code* waitingInst;
+	code* exedInst;
 	queue<code*> PreIssue;
 	queue<code*> PreMEM;
 	queue<code*> PreALU;
 	queue<code*> PreALUB;
+	int PreALUBState;
 	code* PostMEM;
 	code* PostALU;
 	code* PostALUB;
 	code* IFWaiting;
 
 	set<string> branchSet;
+	set<string> MEMset;
+	set<string> ALUBset;
+	set<string> ALUset;
 	ofstream simulationFile;
 
-	void initBranch();
-	bool needStall(code* instruction);
-	void IF();
+	void initInstSet();
+	bool checkWrite(int reg);
+	bool checkRead(int reg);
+	bool RAW(code* instruction);
+	bool WAWorWAR(code* instruction);
+	void updatePC(code* instruction);
+	int IF();		//return 1: fetch a BREAK;
 	void Issue();
 	void MEM();
 	void ALU();
