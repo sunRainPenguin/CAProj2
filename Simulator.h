@@ -50,7 +50,8 @@ private:
 	void initInstSet();
 	bool checkWrite(int reg);
 	bool checkRead(int reg);
-	bool RAW(code* instruction);
+	bool IFRAW(code* instruction);
+	bool IssueRAW(code* instruction);
 	bool WAWorWAR(code* instruction);
 	void updatePC(code* instruction);
 	int IF();		//return 1: fetch a BREAK;

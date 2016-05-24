@@ -80,7 +80,7 @@ bool instruction::matchCategory2()
 	immediate = Util::binaryToDecimal(binaryCode.substr(16, 16));
 	printFormat();
 
-	string instrText = functionCode + " R" + Util::int2string(rt) + ", R" + Util::int2string(rs) + ", #" + Util::int2string(immediate);
+	string instrText = functionCode + "\t"+"R" + Util::int2string(rt) + ", R" + Util::int2string(rs) + ", #" + Util::int2string(immediate);
 	disassemblyFile << instrText<<'\n';
 	this->instr_text = instrText;
 	return true;
@@ -113,7 +113,7 @@ bool instruction::matchSpecial()
 		rs = Util::binaryToDecimal(binaryCode.substr(6, 5));
 		opcode = "JR";
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rs);
+		string instrText = opcode + "\t"+"R" + Util::int2string(rs);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 
@@ -132,7 +132,7 @@ bool instruction::matchSpecial()
 		rd = Util::binaryToDecimal(binaryCode.substr(16, 5));
 
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rd) + ", R" + Util::int2string(rs) + ", R" + Util::int2string(rt);
+		string instrText = opcode + "\t" + "R" + Util::int2string(rd) + ", R" + Util::int2string(rs) + ", R" + Util::int2string(rt);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;
@@ -153,7 +153,7 @@ bool instruction::matchSpecial()
 
 		//SLL rd, rt, sa ; SRL rd, rt, sa ; SRA rd, rt, sa
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rd) + ", R" + Util::int2string(rt) + ", #" + Util::int2string(sa);
+		string instrText = opcode + "\t"+"R" + Util::int2string(rd) + ", R" + Util::int2string(rt) + ", #" + Util::int2string(sa);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;
@@ -175,7 +175,7 @@ bool instruction::matchSpecial2()
 
 		//MUL rd, rs, rt
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rd) + ", R" + Util::int2string(rs) + ", R" + Util::int2string(rt);
+		string instrText = opcode + "\t" + "R" + Util::int2string(rd) + ", R" + Util::int2string(rs) + ", R" + Util::int2string(rt);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;
@@ -191,7 +191,7 @@ bool instruction::matchOthers()
 		opcode = "J";
 		target_instr_index = 4 * (Util::binaryToDecimal(binaryCode.substr(6, 26)));
 		printFormat();
-		string instrText = opcode + " #" + Util::int2string(target_instr_index);
+		string instrText = opcode + "\t" + "#" + Util::int2string(target_instr_index);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 
@@ -210,7 +210,7 @@ bool instruction::matchOthers()
 
 		//SW rt, offset(base) ; LW rt, offset(base)
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rt) + ", " + Util::int2string(offset) + "(R" + Util::int2string(base) + ")";
+		string instrText = opcode + "\t" + "R" + Util::int2string(rt) + ", " + Util::int2string(offset) + "(R" + Util::int2string(base) + ")";
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;
@@ -224,7 +224,7 @@ bool instruction::matchOthers()
 
 		//BEQ rs, rt, offset
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rs) + ", R" + Util::int2string(rt) + ", #" + Util::int2string(offset);
+		string instrText = opcode + "\t" + "R" + Util::int2string(rs) + ", R" + Util::int2string(rt) + ", #" + Util::int2string(offset);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;
@@ -241,7 +241,7 @@ bool instruction::matchOthers()
 
 		//BLTZ rs, offset ; BGTZ rs, offset
 		printFormat();
-		string instrText = opcode + " R" + Util::int2string(rs) + ", #" + Util::int2string(offset);
+		string instrText = opcode + "\t" + "R" + Util::int2string(rs) + ", #" + Util::int2string(offset);
 		disassemblyFile << instrText << '\n';
 		this->instr_text = instrText;
 		return true;

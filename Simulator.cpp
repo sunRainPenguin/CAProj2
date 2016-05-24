@@ -275,7 +275,7 @@ bool Simulator::checkRead(int reg)
 	return false;
 }
 
-bool Simulator::RAW(code* instruction)
+bool Simulator::IFRAW(code* instruction)
 {
 
 	if (instruction->opcode == "JR" && checkWrite(instruction->rs) == true)
@@ -284,6 +284,45 @@ bool Simulator::RAW(code* instruction)
 		return true;
 	if ((instruction->opcode == "BLTZ" || instruction->opcode == "BGTZ") && checkWrite(instruction->rs))
 		return true;
+	return false;
+}
+bool Simulator::IssueRAW(code* instruction)
+{
+	if (instruction->opcode == "LW")
+	{
+		if (checkWrite(instruction->base))
+			return true;
+		else
+			return false;
+	}
+	if (instruction->opcode == "SW")
+	{
+		if (checkWrite(instruction->rt) || checkWrite(instruction->base))
+			return true;
+		else
+			return false;
+	}
+	if (instruction->category == 2)
+	{
+		if (checkWrite(instruction->rs))
+			return true;
+		else
+			return false;
+	}
+	if (instruction->opcode == "SLL" || instruction->opcode == "SRL" || instruction->opcode == "SRA")
+	{
+		if (checkWrite(instruction->rt) || checkWrite(instruction->sa))
+			return true;
+		else
+			return false;
+	}
+	if (instruction->opcode == "ADD" || instruction->opcode == "SUB" || instruction->opcode == "MUL")
+	{
+		if (checkWrite(instruction->rs) || checkWrite(instruction->rt))
+			return true;
+		else
+			return false;
+	}
 	return false;
 }
 
@@ -297,6 +336,7 @@ bool Simulator::WAWorWAR(code* instruction)
 		else
 			return false;
 	}
+
 	if (instruction->category == 2)
 	{
 		if (checkWrite(instruction->rt) || checkRead(instruction->rt))
@@ -400,10 +440,10 @@ void Simulator::pipeline()
 
 int Simulator::IF()
 {
-	//这里暂时假设只判断branch的RAW
+	//这里暂时假设只判断branch的IFRAW
 	if (waitingInst != NULL )		//如果有正在等待执行的指令，则只执行正在等待的指令
 	{
-		if (RAW(waitingInst))
+		if (IFRAW(waitingInst))
 			return 0;
 		else
 		{
@@ -419,7 +459,7 @@ int Simulator::IF()
 	{
 		if (branchSet.find(instructions[lineInFile]->opcode) != branchSet.end())		//is branch?
 		{
-			if (RAW(instructions[lineInFile]))
+			if (IFRAW(instructions[lineInFile]))
 				waitingInst = instructions[lineInFile];
 			else
 			{
@@ -431,13 +471,13 @@ int Simulator::IF()
 		{
 			if (instructions[lineInFile]->opcode == "BREAK")
 				return 1;
-			PreIssue.push(instructions[lineInFile]);	//%%%这里需要判断stall
+			finalPreIssue.push(instructions[lineInFile]);	//%%%这里需要判断stall
 			PC = PC + 4;
-			if (PreIssue.size() < preIssueMaxSize && (lineInFile + 1) < instructions.size())
+			if (finalPreIssue.size() < preIssueMaxSize && (lineInFile + 1) < instructions.size())
 			{
 				if (instructions[lineInFile + 1]->opcode == "BREAK")
 					return 1;
-				PreIssue.push(instructions[lineInFile + 1]);
+				finalPreIssue.push(instructions[lineInFile + 1]);
 				PC = PC + 4;
 			}
 		}
@@ -474,12 +514,14 @@ void Simulator::Issue()
 		}
 		if (!needStall && ALUset.find(instruction->opcode) != ALUset.end())
 		{
-			if (PreALU.size() >= preALUMaxSize)
+			if (PreALU.size() >= preALUMaxSize)			//这里比较的应该是上个周期结束后的PreALU
 				needStall = true;
 			else
 				operaterType = "ALU";
 		}
 		if (!needStall && WAWorWAR(instruction))
+			needStall = true;
+		if (!needStall && IssueRAW(instruction))
 			needStall = true;
 
 		if (needStall)
@@ -491,7 +533,7 @@ void Simulator::Issue()
 			if (operaterType == "ALUB")
 				PreALUB.push(instruction);
 			if (operaterType == "ALU")
-				PreALU.push(instruction);
+				finalPreALU.push(instruction);
 		}
 
 		finalPreIssue.pop();
