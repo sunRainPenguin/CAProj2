@@ -34,11 +34,12 @@ private:
 	queue<code*> PreMEM;
 	queue<code*> PreALU;
 	queue<code*> PreALUB;
+	queue<code*> finalPreALU;
+	queue<code*> finalPreIssue;
 	int PreALUBState;
 	code* PostMEM;
 	code* PostALU;
 	code* PostALUB;
-	code* IFWaiting;
 
 	set<string> branchSet;
 	set<string> MEMset;

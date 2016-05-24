@@ -15,4 +15,6 @@ using namespace std;
 #define regCount 32
 #define codeBegAdd 64
 #define preIssueMaxSize 4
-
+#define preALUMaxSize 2
+#define preALUBMaxSize 2
+#define preMEMMaxSize 2

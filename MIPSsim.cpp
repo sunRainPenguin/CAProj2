@@ -55,8 +55,7 @@ int main(int n, char * arg[])
 
 	Simulator* simulator = new Simulator();
 	simulator->setInstructionAndData(instructions,dataArray);
-	simulator->translate();
-
+	simulator->pipeline();
 
 	return 0;
 }

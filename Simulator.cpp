@@ -20,6 +20,11 @@ void Simulator::reset()
 	PreALUBState = 0;
 	disassembly = "";
 	currentCycleStr = "";
+	waitingInst = NULL;
+	exedInst = NULL;
+	PostMEM = NULL;
+	PostALU = NULL;
+	PostALUB = NULL;
 	registers.clear();
 	dataVal.clear();
 }
@@ -65,23 +70,23 @@ void Simulator::initInstSet()
 
 bool Simulator::checkWrite(int reg)
 {
-	queue<code*> tempPreIssue = PreIssue;
 	code* instruction = NULL;
-	while (tempPreIssue.size() > 0)
-	{
-		instruction = tempPreIssue.front();
-		tempPreIssue.pop();
-		if (instruction->opcode == "LW" && reg == instruction->rt)
-			return true;
-		if (instruction->category == 2 && reg == instruction->rt)
-			return true;
-		if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
-			&& reg == instruction->rd)
-			return true;
-	}
+	//queue<code*> tempPreIssue = PreIssue;
+	//while (tempPreIssue.size() > 0)
+	//{
+	//	instruction = tempPreIssue.front();
+	//	tempPreIssue.pop();
+	//	if (instruction->opcode == "LW" && reg == instruction->rt)
+	//		return true;
+	//	if (instruction->category == 2 && reg == instruction->rt)
+	//		return true;
+	//	if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
+	//		&& reg == instruction->rd)
+	//		return true;
+	//}
 
 	queue<code*> tempPreMEM = PreMEM;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreMEM.size() > 0)
 	{
 		instruction = tempPreMEM.front();
@@ -96,7 +101,7 @@ bool Simulator::checkWrite(int reg)
 	}
 
 	queue<code*> tempPreALU = PreALU;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreALU.size() > 0)
 	{
 		instruction = tempPreALU.front();
@@ -111,7 +116,7 @@ bool Simulator::checkWrite(int reg)
 	}
 
 	queue<code*> tempPreALUB = PreALUB;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreALUB.size() > 0)
 	{
 		instruction = tempPreALUB.front();
@@ -165,8 +170,8 @@ bool Simulator::checkWrite(int reg)
 
 bool Simulator::checkRead(int reg)
 {
-	queue<code*> tempPreIssue = PreIssue;
 	code* instruction = NULL;
+	/*queue<code*> tempPreIssue = PreIssue;
 	while (tempPreIssue.size() > 0)
 	{
 		instruction = tempPreIssue.front();
@@ -179,10 +184,10 @@ bool Simulator::checkRead(int reg)
 			return true;
 		if ((instruction->opcode == "ADD" || instruction->opcode == "SUB" || instruction->opcode == "MUL") && (reg == instruction->rs || reg == instruction->rt))
 			return true;
-	}
+	}*/
 
 	queue<code*> tempPreMEM = PreMEM;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreMEM.size() > 0)
 	{
 		instruction = tempPreMEM.front();
@@ -198,7 +203,7 @@ bool Simulator::checkRead(int reg)
 	}
 
 	queue<code*> tempPreALU = PreALU;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreALU.size() > 0)
 	{
 		instruction = tempPreALU.front();
@@ -214,7 +219,7 @@ bool Simulator::checkRead(int reg)
 	}
 
 	queue<code*> tempPreALUB = PreALUB;
-	code* instruction = NULL;
+	instruction = NULL;
 	while (tempPreALUB.size() > 0)
 	{
 		instruction = tempPreALUB.front();
@@ -285,14 +290,27 @@ bool Simulator::RAW(code* instruction)
 bool Simulator::WAWorWAR(code* instruction)
 {
 	//%%%ISSUE:For MEM instructions, The load instruction must wait 
-	if (instruction->opcode == "LW" && (checkWrite(instruction->rt) || checkRead(instruction->rt)))
-		return true;
-	if (instruction->category == 2 && (checkWrite(instruction->rt) || checkRead(instruction->rt)))
-		return true;
-	if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
-		&& (checkWrite(instruction->rd) || checkRead(instruction->rd)))
-		return true;
-
+	if (instruction->opcode == "LW")
+	{
+		if (checkWrite(instruction->rt) || checkRead(instruction->rt))
+			return true;
+		else
+			return false;
+	}
+	if (instruction->category == 2)
+	{
+		if (checkWrite(instruction->rt) || checkRead(instruction->rt))
+			return true;
+		else
+			return false;
+	}
+	if (ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
+	{
+		if (checkWrite(instruction->rd) || checkRead(instruction->rd))
+			return true;
+		else
+			return false;
+	}
 	return false;
 }
 
@@ -351,31 +369,63 @@ void Simulator::pipeline()
 {
 	cycle = 0;
 	PC = codeBegAdd;
-	while (instructions.size()!=0)
+	//while (instructions.size()!=0)
+	//{
+	//	cycle++;
+	//	if (IF() == 1)
+	//		break;
+	//	Issue();
+	//	MEM();
+	//	ALU();
+	//	ALUB();
+	//	WB();
+	//	print();
+	//}
+	while (instructions.size() != 0)
 	{
 		cycle++;
+		WB();
+		ALUB();
+		ALU();
+		MEM();
+		Issue();
 		if (IF() == 1)
 			break;
-		Issue();
-		MEM();
-		ALU();
-		ALUB();
-		WB();
+		PreALU = finalPreALU;
+		PreIssue = finalPreIssue;
+		print();
 	}
 
 }
 
 int Simulator::IF()
 {
-	int lineInFile = (PC - codeBegAdd) / preIssueMaxSize;		//文件中的第几行指令，不包括数据
-	if (PreIssue.size() < preIssueMaxSize && lineInFile < instructions.size() && waitingInst == NULL)
+	//这里暂时假设只判断branch的RAW
+	if (waitingInst != NULL )		//如果有正在等待执行的指令，则只执行正在等待的指令
+	{
+		if (RAW(waitingInst))
+			return 0;
+		else
+		{
+			updatePC(waitingInst);
+			exedInst = waitingInst;
+			return 0;
+		}
+	}
+
+	//没有等待的指令
+	int lineInFile = (PC - codeBegAdd) / 4;		//文件中的第几行指令，不包括数据
+	if (PreIssue.size() < preIssueMaxSize && lineInFile < instructions.size())
 	{
 		if (branchSet.find(instructions[lineInFile]->opcode) != branchSet.end())		//is branch?
 		{
 			if (RAW(instructions[lineInFile]))
 				waitingInst = instructions[lineInFile];
 			else
+			{
 				updatePC(instructions[lineInFile]);
+				exedInst = instructions[lineInFile];
+			}	
 		}
 		else
 		{
@@ -402,28 +452,29 @@ void Simulator::Issue()
 	queue<code*> tempPreIssue;
 	bool needStall;
 	string operaterType;
-	while (index>0 && PreIssue.size()>0)
+	finalPreIssue = PreIssue;
+	while (index>0 && finalPreIssue.size()>0)
 	{
 		index--;
-		instruction = PreIssue.front();
+		instruction = finalPreIssue.front();
 		needStall = false;
 		if (MEMset.find(instruction->opcode) != MEMset.end())
 		{
-			if (PreMEM.size() >= 2)
+			if (PreMEM.size() >= preMEMMaxSize)
 				needStall = true;
 			else
 				operaterType = "MEM";
 		}
 		if (!needStall && ALUBset.find(instruction->opcode) != ALUBset.end())
 		{
-			if (PreALUB.size() >= 2)
+			if (PreALUB.size() >= preALUBMaxSize)
 				needStall = true;
 			else
 				operaterType = "ALUB";
 		}
 		if (!needStall && ALUset.find(instruction->opcode) != ALUset.end())
 		{
-			if (PreALU.size() >= 2)
+			if (PreALU.size() >= preALUMaxSize)
 				needStall = true;
 			else
 				operaterType = "ALU";
@@ -443,9 +494,16 @@ void Simulator::Issue()
 				PreALU.push(instruction);
 		}
 
-		PreIssue.pop();
+		finalPreIssue.pop();
 	}
-	PreIssue = tempPreIssue;
+
+	while (finalPreIssue.size() > 0)		//把PreIssue中未issue的指令加入到tempPreIssue中保存
+	{
+		instruction = finalPreIssue.front();
+		tempPreIssue.push(instruction);
+		finalPreIssue.pop();
+	}
+	finalPreIssue = tempPreIssue;
 }
 void Simulator::MEM()
 {
@@ -467,10 +525,11 @@ void Simulator::MEM()
 }
 void Simulator::ALU()
 {
-	if (PreALU.size() > 0)
+	finalPreALU = PreALU;
+	if (finalPreALU.size() > 0)
 	{
-		PostALU = PreALU.front;
-		PreALU.pop();
+		PostALU = finalPreALU.front();
+		finalPreALU.pop();
 	}
 }
 void Simulator::ALUB()
@@ -488,9 +547,243 @@ void Simulator::ALUB()
 }
 void Simulator::WB()
 {
+	int rd;
+	int rt;
+	int rs;
+	int sa;
+	int imme;
+	int target;
+	int offset;
+	int base;
+	string funcode;
+	string opcode;
+	string instrTxt;
+	int category;
+	int dataIndex = 0;		//文件中第几个数据
+	code* instruction = NULL;
 
+	//MEM
+	if (PostMEM != NULL)		//LW
+	{
+		instruction = PostMEM;
+		rt = instruction ->rt;
+		offset = instruction->offset;		//这里的offset之前乘过4了
+		base = instruction->base;
+		dataIndex = (registers[base] + offset - dataBegAdd) / 4;
+		registers[rt] = dataVal[dataIndex];
+		PostMEM = NULL;
+	}
+
+	//ALU
+	if (PostALU != NULL)		
+	{
+		instruction = PostALU;
+		category = instruction->category;
+		opcode = instruction->opcode;
+		if (category == 2)
+		{
+			rs = instruction->rs;
+			rt = instruction->rt;
+			rd = instruction->rd;
+			imme = instruction->immediate;
+			funcode = instruction->functionCode;
+
+			if (funcode == "ADD")
+				registers[rt] = registers[rs] + imme;
+			if (funcode == "SUB")
+				registers[rt] = registers[rs] - imme;
+			if (funcode == "AND")
+				registers[rt] = registers[rs] & imme;
+			if (funcode == "NOR")
+				registers[rt] = ~(registers[rs] | imme);
+			if (funcode == "SLT")
+			{
+				if (registers[rs] < registers[rt])
+					registers[rd] = 1;
+				else
+					registers[rd] = 0;
+			}
+		}
+		else if (opcode == "ADD")
+		{
+			rd = instruction->rd;
+			rs = instruction->rs;
+			rt = instruction->rt;
+			registers[rd] = registers[rs] + registers[rt];
+		}
+		else if (opcode == "SUB")
+		{
+			rd = instruction->rd;
+			rs = instruction->rs;
+			rt = instruction->rt;
+			registers[rd] = registers[rs] - registers[rt];
+		}
+		PostALU = NULL;
+	}
+
+	//ALUB
+	if (PostALUB != NULL)
+	{
+		instruction = PostALUB;
+		opcode = instruction->opcode;
+		if (opcode == "SLL")
+		{
+			rt = instruction ->rt;
+			rd = instruction ->rd;
+			sa = instruction ->sa;
+			registers[rd] = registers[rt] << sa;
+		}
+		else if (opcode == "SRL")
+		{
+			rt = instruction ->rt;
+			rd = instruction ->rd;
+			sa = instruction ->sa;
+
+			bitset<32> tempBitset = registers[rt];
+			bitset<32> tempBitsetR = tempBitset >> sa;
+			registers[rd] = tempBitsetR.to_ulong();
+		}
+		else if (opcode == "SRA")
+		{
+			rt = instruction ->rt;
+			rd = instruction ->rd;
+			sa = instruction ->sa;
+			registers[rd] = registers[rt] >> sa;
+		}
+		PostALUB = NULL;
+	}
 }
 void Simulator::print()
 {
+	queue<code*> tempPreIssue = PreIssue;
+	queue<code*> tempPreALU = PreALU;
+	queue<code*> tempPreALUB = PreALUB;
+	queue<code*> tempPreMEM = PreMEM;
 
+	simulationFile << "--------------------" << '\n';
+	simulationFile << "Cycle:" << cycle << '\n';
+	simulationFile << '\n';
+	simulationFile << "IF Unit:" << '\n';
+	simulationFile << '\t' << "Waiting Instruction:";
+	if (waitingInst != NULL)
+		simulationFile << "["<<waitingInst->instr_text<<"]";
+	simulationFile << '\n';
+	simulationFile << '\t' << "Executed Instruction:";
+	if (exedInst != NULL)
+		simulationFile << "[" << exedInst->instr_text<<"]";
+	simulationFile << '\n';
+
+	simulationFile << "Pre-Issue Buffer:" << '\n';
+	code* instruction;
+	for (int i = 0; i<preIssueMaxSize; i++)
+	{
+		simulationFile << '\t' << "Entry " << i << ":";
+		if (tempPreIssue.size() > 0)
+		{
+			instruction = tempPreIssue.front();
+			tempPreIssue.pop();
+			simulationFile << "[" << instruction->instr_text<<"]";
+		}
+		simulationFile << '\n';
+	}
+
+	simulationFile << "Pre-ALU Queue:" << '\n';
+	for (int i = 0; i<preALUMaxSize; i++)
+	{
+		simulationFile << '\t' << "Entry " << i << ":";
+		if (tempPreALU.size() > 0)
+		{
+			instruction = tempPreALU.front();
+			tempPreALU.pop();
+			simulationFile << "[" << instruction->instr_text<<"]";
+		}
+		simulationFile << '\n';
+	}
+	simulationFile << "Post-ALU Buffer:";
+	if (PostALU != NULL)
+		simulationFile << "[" << PostALU->instr_text << "]";
+	simulationFile << '\n';
+
+	simulationFile << "Pre-ALUB Queue:" << '\n';
+	for (int i = 0; i<preALUBMaxSize; i++)
+	{
+		simulationFile << '\t' << "Entry " << i << ":";
+		if (tempPreALUB.size() > 0)
+		{
+			instruction = tempPreALUB.front();
+			tempPreALUB.pop();
+			simulationFile << "[" << instruction->instr_text<<"]";
+		}
+		simulationFile << '\n';
+	}
+	simulationFile << "Post-ALUB Buffer:";
+	if (PostALUB != NULL)
+		simulationFile << "[" << PostALUB->instr_text << "]";
+	simulationFile << '\n';
+
+	simulationFile << "Pre-MEM Queue:" << '\n';
+	for (int i = 0; i<preMEMMaxSize; i++)
+	{
+		simulationFile << '\t' << "Entry " << i << ":";
+		if (tempPreMEM.size() > 0)
+		{
+			instruction = tempPreMEM.front();
+			tempPreMEM.pop();
+			simulationFile << "[" << instruction->instr_text<<"]";
+		}
+		simulationFile << '\n';
+	}
+	simulationFile << "Post-MEM Buffer:";
+	if (PostMEM != NULL)
+		simulationFile << "[" << PostMEM->instr_text << "]";
+	simulationFile << '\n';
+	
+	simulationFile << '\n';
+	simulationFile << "Registers" << '\n';
+	simulationFile << "R00:";
+	for (int i = 0; i < 8; i++)
+	{
+		simulationFile << '\t' << registers[i];
+	}
+	simulationFile << '\n';
+	simulationFile << "R08:";
+	for (int i = 8; i < 16; i++)
+	{
+		simulationFile << '\t' << registers[i];
+	}
+	simulationFile << '\n';
+	simulationFile << "R16:";
+	for (int i = 16; i < 24; i++)
+	{
+		simulationFile << '\t' << registers[i];
+	}
+	simulationFile << '\n';
+	simulationFile << "R24:";
+	for (int i = 24; i < 32; i++)
+	{
+		simulationFile << '\t' << registers[i];
+	}
+	simulationFile << '\n';
+	simulationFile << '\n';
+
+	simulationFile << "Data" << '\n';
+	double temp = (double)dataCount / (double)8;
+	for (int i = 0; i < (ceil(temp)) - 1; i++)
+	{
+		simulationFile << Util::int2string(dataBegAdd + i * 32) << ':';
+		for (int j = 0 + 8 * i; j < 8 + 8 * i; j++)
+		{
+			simulationFile << '\t' << dataVal[j];
+		}
+		simulationFile << '\n';
+	}
+	//打印最后一行
+	int lastLine = ceil(temp);
+	simulationFile << Util::int2string(dataBegAdd + (lastLine - 1) * 32) << ':';
+	for (int j = 8 * (lastLine - 1); j < dataCount; j++)
+	{
+		simulationFile << '\t' << dataVal[j];
+	}
+	simulationFile << '\n';
+	simulationFile.flush();
 }
