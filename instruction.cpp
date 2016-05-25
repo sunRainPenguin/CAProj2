@@ -252,15 +252,15 @@ bool instruction::matchOthers()
 
 void instruction::printFormat()
 {
-	disassemblyFile << binaryCode.substr(0, 6);
+	disassemblyFile << binaryCode.substr(0, 1);
 	disassemblyFile << " ";
-	for (int i = 0; i <= 3; i++)
+	for (int i = 0; i <= 4; i++)
 	{
-		disassemblyFile << binaryCode.substr(6 + 5 * i, 5);
+		disassemblyFile << binaryCode.substr(1 + 5 * i, 5);
 		disassemblyFile << " ";
 	}
 	disassemblyFile << binaryCode.substr(26, 6) << '\t';
-	disassemblyFile << line<<'\t';
+	disassemblyFile << line << '\t';
 }
 void instruction::printComplement()
 {

@@ -29,3 +29,16 @@ string Util::replaceFirstOf(string src, string match, string fill)
 	return result;
 
 }
+bool Util::findInstrInQueue(code* instruction, queue<code*> objQueue)
+{
+	queue<code*> tempQueue = objQueue;
+	code* instrInQueue=NULL;
+	while (tempQueue.size()>0)
+	{
+		instrInQueue = tempQueue.front();
+		tempQueue.pop();
+		if (instruction->instr_text == instrInQueue->instr_text)
+			return true;
+	}
+	return false;
+}

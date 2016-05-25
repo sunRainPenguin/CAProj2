@@ -1,8 +1,6 @@
 //反汇编过程
 #pragma once
 #include "Util.h"
-#include "code.h"
-#include "data.h"
 
 class instruction
 {

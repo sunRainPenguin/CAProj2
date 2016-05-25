@@ -1,9 +1,9 @@
 #include "Simulator.h"
 
 
-Simulator::Simulator()
+Simulator::Simulator(char* fileName)
 {
-	simulationFile.open("simulation.txt", ios::app);
+	simulationFile.open(fileName, ios::app);
 	initInstSet();
 	reset();
 }
@@ -18,13 +18,14 @@ void Simulator::reset()
 {
 	cycle = 0;
 	PreALUBState = 0;
-	disassembly = "";
-	currentCycleStr = "";
 	waitingInst = NULL;
 	exedInst = NULL;
 	PostMEM = NULL;
 	PostALU = NULL;
 	PostALUB = NULL;
+	finalPostALU = NULL;
+	finalPostMEM = NULL;
+	finalPostALUB = NULL;
 	registers.clear();
 	dataVal.clear();
 }
@@ -44,10 +45,7 @@ void Simulator::setInstructionAndData(vector<code*> instructions, vector<data*> 
 	dataBegAdd = codeBegAdd + 4 * instructions.size();
 	dataCount = dataArray.size();
 	for (int i = 0; i < 32; i++)
-	{
 		registers.push_back(0);
-		regState.push_back(0);
-	}
 		
 }
 
@@ -68,22 +66,47 @@ void Simulator::initInstSet()
 	ALUset.insert("SUB");
 }
 
-bool Simulator::checkWrite(int reg)
+bool Simulator::checkWrite(int reg, int PreIssueIndex)
 {
+	//%%%最后还是需要添加对之前还未issue的指令的检查
 	code* instruction = NULL;
-	//queue<code*> tempPreIssue = PreIssue;
-	//while (tempPreIssue.size() > 0)
-	//{
-	//	instruction = tempPreIssue.front();
-	//	tempPreIssue.pop();
-	//	if (instruction->opcode == "LW" && reg == instruction->rt)
-	//		return true;
-	//	if (instruction->category == 2 && reg == instruction->rt)
-	//		return true;
-	//	if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
-	//		&& reg == instruction->rd)
-	//		return true;
-	//}
+	//与PreIssue中PreIssueIndex之前的指令进行对比检查
+	if (PreIssueIndex > 0){
+		queue<code*> tempPreIssue;
+		//if (PreIssueIndex == preIssueMaxSize)			//如果是IF调用了该函数，则需要比较此次放入PreIssue中的、之前的指令
+		//	tempPreIssue = finalPreIssue;
+		//else
+		tempPreIssue = PreIssue;
+
+		int counter = 0;
+		while (counter<PreIssueIndex && tempPreIssue.size()>0)
+		{
+			instruction = tempPreIssue.front();
+			tempPreIssue.pop();
+			if (instruction->opcode == "LW" && reg == instruction->rt)
+				return true;
+			if (instruction->category == 2 && reg == instruction->rt)
+				return true;
+			if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
+				&& reg == instruction->rd)
+				return true;
+			counter++;
+		}
+	}
+
+	/*queue<code*> tempPreIssue = PreIssue;
+	while (tempPreIssue.size() > 0)
+	{
+		instruction = tempPreIssue.front();
+		tempPreIssue.pop();
+		if (instruction->opcode == "LW" && reg == instruction->rt)
+			return true;
+		if (instruction->category == 2 && reg == instruction->rt)
+			return true;
+		if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
+			&& reg == instruction->rd)
+			return true;
+	}*/
 
 	queue<code*> tempPreMEM = PreMEM;
 	instruction = NULL;
@@ -168,9 +191,38 @@ bool Simulator::checkWrite(int reg)
 	return false;
 }
 
-bool Simulator::checkRead(int reg)
+bool Simulator::checkRead(int reg, int PreIssueIndex, bool isLoad)
 {
+	//%%%最后还是需要添加对之前还未issue的指令的检查
 	code* instruction = NULL;
+	//与PreIssue中PreIssueIndex之前的指令进行对比检查
+	if (PreIssueIndex > 0){
+		queue<code*> tempPreIssue = PreIssue;
+		int counter = 0;
+		while (counter<PreIssueIndex && tempPreIssue.size()>0)
+		{
+			instruction = tempPreIssue.front();
+			tempPreIssue.pop();
+			if (instruction->opcode == "SW" && reg == instruction->rt)
+			{
+				if (isLoad)
+				{
+					if (Util::findInstrInQueue(instruction, finalPreIssue))
+						return true;
+				}
+				else
+					return true;
+			}
+			if (instruction->category == 2 && reg == instruction->rs)
+				return true;
+			if ((instruction->opcode == "SLL" || instruction->opcode == "SRL" || instruction->opcode == "SRA") && (reg == instruction->rt || reg == instruction->sa))
+				return true;
+			if ((instruction->opcode == "ADD" || instruction->opcode == "SUB" || instruction->opcode == "MUL") && (reg == instruction->rs || reg == instruction->rt))
+				return true;
+			counter++;
+		}
+	}
+	
 	/*queue<code*> tempPreIssue = PreIssue;
 	while (tempPreIssue.size() > 0)
 	{
@@ -193,7 +245,11 @@ bool Simulator::checkRead(int reg)
 		instruction = tempPreMEM.front();
 		tempPreMEM.pop();
 		if (instruction->opcode == "SW" && reg == instruction->rt)
-			return true;
+		{
+			if (!isLoad)
+				return true;
+		}
+
 		if (instruction->category == 2 && reg == instruction->rs)
 			return true;
 		if ((instruction->opcode == "SLL" || instruction->opcode == "SRL" || instruction->opcode == "SRA") && (reg == instruction->rt || reg == instruction->sa))
@@ -278,47 +334,57 @@ bool Simulator::checkRead(int reg)
 bool Simulator::IFRAW(code* instruction)
 {
 
-	if (instruction->opcode == "JR" && checkWrite(instruction->rs) == true)
+	if (instruction->opcode == "JR" && checkWrite(instruction->rs, preIssueMaxSize) == true)
 		return true;
-	if (instruction->opcode == "BEQ" && (checkWrite(instruction->rs) || checkWrite(instruction->rt)))
+	if (instruction->opcode == "BEQ" && (checkWrite(instruction->rs, preIssueMaxSize) || checkWrite(instruction->rt, preIssueMaxSize)))
 		return true;
-	if ((instruction->opcode == "BLTZ" || instruction->opcode == "BGTZ") && checkWrite(instruction->rs))
+	if ((instruction->opcode == "BLTZ" || instruction->opcode == "BGTZ") && checkWrite(instruction->rs, preIssueMaxSize))
 		return true;
 	return false;
 }
-bool Simulator::IssueRAW(code* instruction)
+bool Simulator::branchIFRAW(code* inst_src, code* inst_obj)
+{
+	if (inst_src->opcode == "JR" && branchCheckWrite(inst_src->rs, inst_obj) == true)
+		return true;
+	if (inst_src->opcode == "BEQ" && (branchCheckWrite(inst_src->rs, inst_obj) || branchCheckWrite(inst_src->rt, inst_obj)))
+		return true;
+	if ((inst_src->opcode == "BLTZ" || inst_src->opcode == "BGTZ") && branchCheckWrite(inst_src->rs, inst_obj))
+		return true;
+	return false;
+}
+bool Simulator::IssueRAW(code* instruction, int PreIssueIndex)
 {
 	if (instruction->opcode == "LW")
 	{
-		if (checkWrite(instruction->base))
+		if (checkWrite(instruction->base, PreIssueIndex))
 			return true;
 		else
 			return false;
 	}
 	if (instruction->opcode == "SW")
 	{
-		if (checkWrite(instruction->rt) || checkWrite(instruction->base))
+		if (checkWrite(instruction->rt, PreIssueIndex) || checkWrite(instruction->base, PreIssueIndex))
 			return true;
 		else
 			return false;
 	}
 	if (instruction->category == 2)
 	{
-		if (checkWrite(instruction->rs))
+		if (checkWrite(instruction->rs, PreIssueIndex))
 			return true;
 		else
 			return false;
 	}
 	if (instruction->opcode == "SLL" || instruction->opcode == "SRL" || instruction->opcode == "SRA")
 	{
-		if (checkWrite(instruction->rt) || checkWrite(instruction->sa))
+		if (checkWrite(instruction->rt, PreIssueIndex) || checkWrite(instruction->sa, PreIssueIndex))
 			return true;
 		else
 			return false;
 	}
 	if (instruction->opcode == "ADD" || instruction->opcode == "SUB" || instruction->opcode == "MUL")
 	{
-		if (checkWrite(instruction->rs) || checkWrite(instruction->rt))
+		if (checkWrite(instruction->rs, PreIssueIndex) || checkWrite(instruction->rt, PreIssueIndex))
 			return true;
 		else
 			return false;
@@ -326,12 +392,25 @@ bool Simulator::IssueRAW(code* instruction)
 	return false;
 }
 
-bool Simulator::WAWorWAR(code* instruction)
+bool Simulator::branchCheckWrite(int reg, code* instr_compare)
+{
+	code* instruction = instr_compare;
+	if (instruction->opcode == "LW" && reg == instruction->rt)
+		return true;
+	if (instruction->category == 2 && reg == instruction->rt)
+		return true;
+	if ((ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
+		&& reg == instruction->rd)
+		return true;
+	return false;
+}
+
+bool Simulator::WAWorWAR(code* instruction, int PreIssueIndex)
 {
 	//%%%ISSUE:For MEM instructions, The load instruction must wait 
 	if (instruction->opcode == "LW")
 	{
-		if (checkWrite(instruction->rt) || checkRead(instruction->rt))
+		if (checkWrite(instruction->rt, PreIssueIndex) || checkRead(instruction->rt, PreIssueIndex, true))
 			return true;
 		else
 			return false;
@@ -339,14 +418,14 @@ bool Simulator::WAWorWAR(code* instruction)
 
 	if (instruction->category == 2)
 	{
-		if (checkWrite(instruction->rt) || checkRead(instruction->rt))
+		if (checkWrite(instruction->rt, PreIssueIndex) || checkRead(instruction->rt, PreIssueIndex))
 			return true;
 		else
 			return false;
 	}
 	if (ALUBset.find(instruction->opcode) != ALUBset.end() || ALUset.find(instruction->opcode) != ALUset.end())
 	{
-		if (checkWrite(instruction->rd) || checkRead(instruction->rd))
+		if (checkWrite(instruction->rd, PreIssueIndex) || checkRead(instruction->rd, PreIssueIndex))
 			return true;
 		else
 			return false;
@@ -421,6 +500,7 @@ void Simulator::pipeline()
 	//	WB();
 	//	print();
 	//}
+	bool isBreak=false;
 	while (instructions.size() != 0)
 	{
 		cycle++;
@@ -430,12 +510,19 @@ void Simulator::pipeline()
 		MEM();
 		Issue();
 		if (IF() == 1)
-			break;
+			isBreak=true;
 		PreALU = finalPreALU;
+		PreALUB = finalPreALUB;
+		PreMEM = finalPreMEM;
 		PreIssue = finalPreIssue;
+		PostALU = finalPostALU;
+		PostALUB = finalPostALUB;
+		PostMEM = finalPostMEM;
 		print();
+		if (isBreak)
+			break;
 	}
-
+	cout << "completed!" << '\n';
 }
 
 int Simulator::IF()
@@ -449,58 +536,80 @@ int Simulator::IF()
 		{
 			updatePC(waitingInst);
 			exedInst = waitingInst;
+			waitingInst = NULL;
 			return 0;
 		}
 	}
+	if (exedInst != NULL)
+		exedInst = NULL;
 
 	//没有等待的指令
 	int lineInFile = (PC - codeBegAdd) / 4;		//文件中的第几行指令，不包括数据
-	if (PreIssue.size() < preIssueMaxSize && lineInFile < instructions.size())
+	int counter = 0;
+	while (PreIssue.size() + counter < preIssueMaxSize && lineInFile < instructions.size() && counter<2)
 	{
 		if (branchSet.find(instructions[lineInFile]->opcode) != branchSet.end())		//is branch?
 		{
-			if (IFRAW(instructions[lineInFile]))
+			if (counter == 1 && lineInFile>0 && branchIFRAW(instructions[lineInFile], instructions[lineInFile - 1]))		//如果是fetch的第二条指令、且为branch指令，则另外还需要与第一条fetch的指令进行比较
+			{
 				waitingInst = instructions[lineInFile];
+				break;
+			}
+			else if (IFRAW(instructions[lineInFile]))
+			{
+				waitingInst = instructions[lineInFile];
+				break;
+			}
 			else
 			{
 				updatePC(instructions[lineInFile]);
 				exedInst = instructions[lineInFile];
-			}	
+			}
+			//if (IFRAW(instructions[lineInFile]))			//不是第二条指令的话，与上个周期中的各个buffer中指令进行比较即可
+			//{
+			//	waitingInst = instructions[lineInFile];
+			//	break;
+			//}
+			/*else
+			{
+				updatePC(instructions[lineInFile]);
+				exedInst = instructions[lineInFile];
+			}
+			break;*/
 		}
 		else
 		{
 			if (instructions[lineInFile]->opcode == "BREAK")
+			{
+				exedInst = instructions[lineInFile];
 				return 1;
+			}
+				
 			finalPreIssue.push(instructions[lineInFile]);	//%%%这里需要判断stall
 			PC = PC + 4;
-			if (finalPreIssue.size() < preIssueMaxSize && (lineInFile + 1) < instructions.size())
-			{
-				if (instructions[lineInFile + 1]->opcode == "BREAK")
-					return 1;
-				finalPreIssue.push(instructions[lineInFile + 1]);
-				PC = PC + 4;
-			}
+			lineInFile = lineInFile + 1;
 		}
+		counter++;
 	}
 	return 0;
 }
 
 void Simulator::Issue()
 {
-	int index = 2;
+	int entryIndex = 0;
+	int counter = 0;
 	code* instruction = NULL;
 	queue<code*> tempPreIssue;
 	bool needStall;
 	string operaterType;
 	finalPreIssue = PreIssue;
-	while (index>0 && finalPreIssue.size()>0)
+	while (counter<2 && finalPreIssue.size()>0)
 	{
-		index--;
 		instruction = finalPreIssue.front();
 		needStall = false;
 		if (MEMset.find(instruction->opcode) != MEMset.end())
 		{
-			if (PreMEM.size() >= preMEMMaxSize)
+			if (PreMEM.size()+counter >= preMEMMaxSize)		//原来PreMEM中的指令数量+新增的指令数量
 				needStall = true;
 			else
 				operaterType = "MEM";
@@ -519,9 +628,9 @@ void Simulator::Issue()
 			else
 				operaterType = "ALU";
 		}
-		if (!needStall && WAWorWAR(instruction))
+		if (!needStall && WAWorWAR(instruction, entryIndex))
 			needStall = true;
-		if (!needStall && IssueRAW(instruction))
+		if (!needStall && IssueRAW(instruction, entryIndex))
 			needStall = true;
 
 		if (needStall)
@@ -529,14 +638,16 @@ void Simulator::Issue()
 		else
 		{
 			if (operaterType == "MEM")
-				PreMEM.push(instruction);
+				finalPreMEM.push(instruction);
 			if (operaterType == "ALUB")
-				PreALUB.push(instruction);
+				finalPreALUB.push(instruction);
 			if (operaterType == "ALU")
 				finalPreALU.push(instruction);
+			counter++;
 		}
 
 		finalPreIssue.pop();
+		entryIndex++;
 	}
 
 	while (finalPreIssue.size() > 0)		//把PreIssue中未issue的指令加入到tempPreIssue中保存
@@ -553,7 +664,7 @@ void Simulator::MEM()
 	{
 		code* instruction = PreMEM.front();
 		if (instruction->opcode == "LW")
-			PostMEM = instruction;
+			finalPostMEM = instruction;
 		else if (instruction->opcode == "SW")
 		{
 			int rt = instruction ->rt;
@@ -562,7 +673,7 @@ void Simulator::MEM()
 			int dataIndex = (registers[base] + offset - dataBegAdd) / 4;
 			dataVal[dataIndex] = registers[rt];
 		}
-		PreMEM.pop();
+		finalPreMEM.pop();
 	}
 }
 void Simulator::ALU()
@@ -570,7 +681,7 @@ void Simulator::ALU()
 	finalPreALU = PreALU;
 	if (finalPreALU.size() > 0)
 	{
-		PostALU = finalPreALU.front();
+		finalPostALU = finalPreALU.front();
 		finalPreALU.pop();
 	}
 }
@@ -581,8 +692,8 @@ void Simulator::ALUB()
 		PreALUBState++;
 		if (PreALUBState == 2)
 		{
-			PostALUB = PreALUB.front();
-			PreALUB.pop();
+			finalPostALUB = PreALUB.front();
+			finalPreALUB.pop();
 			PreALUBState = 0;
 		}
 	}
@@ -607,13 +718,13 @@ void Simulator::WB()
 	//MEM
 	if (PostMEM != NULL)		//LW
 	{
-		instruction = PostMEM;
+		instruction = finalPostMEM;
 		rt = instruction ->rt;
 		offset = instruction->offset;		//这里的offset之前乘过4了
 		base = instruction->base;
 		dataIndex = (registers[base] + offset - dataBegAdd) / 4;
 		registers[rt] = dataVal[dataIndex];
-		PostMEM = NULL;
+		finalPostMEM = NULL;
 	}
 
 	//ALU
@@ -660,7 +771,7 @@ void Simulator::WB()
 			rt = instruction->rt;
 			registers[rd] = registers[rs] - registers[rt];
 		}
-		PostALU = NULL;
+		finalPostALU = NULL;
 	}
 
 	//ALUB
@@ -692,7 +803,7 @@ void Simulator::WB()
 			sa = instruction ->sa;
 			registers[rd] = registers[rt] >> sa;
 		}
-		PostALUB = NULL;
+		finalPostALUB = NULL;
 	}
 }
 void Simulator::print()
@@ -706,13 +817,13 @@ void Simulator::print()
 	simulationFile << "Cycle:" << cycle << '\n';
 	simulationFile << '\n';
 	simulationFile << "IF Unit:" << '\n';
-	simulationFile << '\t' << "Waiting Instruction:";
+	simulationFile << '\t' << "Waiting Instruction: ";
 	if (waitingInst != NULL)
-		simulationFile << "["<<waitingInst->instr_text<<"]";
+		simulationFile <<waitingInst->instr_text;
 	simulationFile << '\n';
-	simulationFile << '\t' << "Executed Instruction:";
+	simulationFile << '\t' << "Executed Instruction: ";
 	if (exedInst != NULL)
-		simulationFile << "[" << exedInst->instr_text<<"]";
+		simulationFile << exedInst->instr_text;
 	simulationFile << '\n';
 
 	simulationFile << "Pre-Issue Buffer:" << '\n';

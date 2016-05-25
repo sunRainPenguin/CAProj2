@@ -7,10 +7,16 @@
 
 int main(int n, char * arg[])
 {
-	ifstream binaryFile("sample.txt");		//ifstream binaryFile(arg[1]);
+	ifstream binaryFile; 		//ifstream binaryFile("sample.txt");
+	binaryFile.open(arg[1], ios::in);
+	if (!binaryFile)
+	{
+		cout << arg[1] << "文件不存在！"<<'\n';
+		return -1;
+	}
 	ofstream disassemblyFile("disassembly.txt", ios::out);
 	disassemblyFile.open("disassembly.txt", ios::app);
-	ofstream simulationFile("simulation.txt", ios::out);
+	ofstream simulationFile(arg[2], ios::out);
 
 	char binary[35];
 	instruction* instructionLine = new instruction();
@@ -53,7 +59,7 @@ int main(int n, char * arg[])
 	disassemblyFile.close();
 	simulationFile.close();
 
-	Simulator* simulator = new Simulator();
+	Simulator* simulator = new Simulator(arg[2]);
 	simulator->setInstructionAndData(instructions,dataArray);
 	simulator->pipeline();
 
